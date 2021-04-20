@@ -246,7 +246,7 @@ def complement(letter):
 
 def main():
     print('this working?')
-    sentence = Sentence(100)
+    sentence = Sentence(30)
     sentence.print()
     print("")
 
