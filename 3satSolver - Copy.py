@@ -1,5 +1,6 @@
 import random
 import string
+import copy
 
 class Sentence:
     representation = []
@@ -16,7 +17,7 @@ class Sentence:
     def __init__(self, num_clauses):
        #   init empty list of list of tuples
         for i in range(num_clauses):
-            clause_size = random.randint(2, 4)
+            clause_size = random.randint(2, 3)
             clause = []
             for j in range(clause_size):
               letter = self.get_random_letter()
@@ -27,6 +28,15 @@ class Sentence:
                   letter = "~" + letter
               clause.append(letter)
             self.representation.append(clause)
+    
+    def manually_set(self, representation):
+        self.representation = representation
+        self.truth_dictionary = {}
+        for clause in representation:
+            for letter in clause:
+                if not (letter[-1] in self.truth_dictionary):
+                    self.truth_dictionary[letter[-1]] = None
+
 
     #function to print a CNF expression
     #@param sentence
@@ -58,6 +68,12 @@ class Sentence:
             if len(clause) == 0:
                 contains_empty = True
         return contains_empty
+    
+    def copy(self):
+        the_copy = copy.deepcopy(self)
+        the_copy.representation = copy.deepcopy(self.representation)
+        the_copy.truth_dictionary = copy.deepcopy(self.truth_dictionary)
+        return the_copy
 
 
 
@@ -68,14 +84,15 @@ class Sentence:
 def evaluate_clause(clause, truth_dictionary):
     truth_value = False
     for letter in clause:
-        if truth_dictionary[letter[-1]] == True:
-            if not is_negated(letter):
-                truth_value = True
-                break
-        elif truth_dictionary[letter[-1]] == False:
-            if is_negated(letter):
-                truth_value = True
-                break
+        if len(clause) != 0:
+            if truth_dictionary[letter[-1]] == True:
+                if not is_negated(letter):
+                    truth_value = True
+                    break
+            elif truth_dictionary[letter[-1]] == False:
+                if is_negated(letter):
+                    truth_value = True
+                    break
     return truth_value
 
 #says whether or not a letter is negated
@@ -135,11 +152,11 @@ def get_pure_literals(sentence):
 
 def unit_propagate(sentence, unit_clauses):
     #remove all instances of letter from sentence
-    print("we unit propagating out here")
-    print("the sentence is:")
-    sentence.print()
-    print("our unit clauses are:")
-    print(unit_clauses)
+    #print("we unit propagating out here")
+    #print("the sentence is:")
+    #sentence.print()
+    #print("our unit clauses are:")
+    #print(unit_clauses)
     for unit in unit_clauses:
         #get_unit_clauses is actually a list of lists, so we need to access it like this
         letter = unit[0]
@@ -155,33 +172,40 @@ def unit_propagate(sentence, unit_clauses):
             if (complement(letter) in clause):
                 #two unit clauses conflict! unsatisfiable no matter what
                 if len(clause) == 1:
-                    print("two unit clauses conflict! the sentence is unsatisfiable.")
-                    print("the contradictory clauses are:")
-                    print(letter + " and " + complement(letter))
-                    quit()
-                clause.remove(complement(letter))
-    return sentence
+                    return False
+                else:
+                    clause.remove(complement(letter))
+    return True
 
     
     #return modified sentence
 
 
 def pure_literal_assign(sentence):
-    print("we pure literal assigning out here")
-    print("the sentence is:")
-    sentence.print()
+    #print("we pure literal assigning out here")
+    #print("the sentence is:")
+    #sentence.print()
     pure_literals = get_pure_literals(sentence)
-    for literal in pure_literals:
+    if (len(pure_literals) != 0):
+        literal = pure_literals[0]
         if (is_negated(literal)):
-            #set the literal to false if it's always negated
             sentence.truth_dictionary[literal[-1]] = False
         else:
-            #set it to true if it's never negated
             sentence.truth_dictionary[literal[-1]] = True
-        #remove all the clauses we satisfied by this assignment
         for clause in sentence.representation:
             if (evaluate_clause(clause, sentence.truth_dictionary) == True):
                 sentence.representation.remove(clause)
+    #for literal in pure_literals:
+       # if (is_negated(literal)):
+            #set the literal to false if it's always negated
+           # sentence.truth_dictionary[literal[-1]] = False
+        #else:
+            #set it to true if it's never negated
+           # sentence.truth_dictionary[literal[-1]] = True
+        #remove all the clauses we satisfied by this assignment
+       # for clause in sentence.representation:
+            #if (evaluate_clause(clause, sentence.truth_dictionary) == True):
+               # sentence.representation.remove(clause)
     return sentence
     
 #get the list of variables that have no truth value assigned
@@ -194,13 +218,21 @@ def get_unassigned_variables(sentence):
             unassigned_variables.append(letter)
     return unassigned_variables
 
-#the main recursive algorithm, takes a sentence and figures out if its satisfiable
-def DPLL(sentence):
-    print("the sentence is:")
-    sentence.print()
+def remove_satisfied(sentence):
+    anything_satisfied = False
     for clause in sentence.representation:
         if (evaluate_clause(clause, sentence.truth_dictionary) == True):
             sentence.representation.remove(clause)
+            anything_satisfied = True
+    return anything_satisfied
+def remove_complements(sentence, letter):
+    for i in range(3):
+        for clause in sentence.representation:
+            if (complement(letter) in clause):
+                clause.remove(complement(letter))
+#the main recursive algorithm, takes a sentence and figures out if its satisfiable
+def DPLL(sentence):
+
     #since we remove all satisfied clauses, we can just check if 
     # the sentence is empty
     if (len(sentence.representation) == 0):
@@ -215,7 +247,11 @@ def DPLL(sentence):
         print(assigned_dictionary)
         print("the letters which have no bearing on the truth value are:")
         print(unassigned_dictionary)
-        quit()   
+        quit()
+        return True  
+    else:
+        print("the sentence is:")
+        sentence.print()
     #if we have made a clause empty, there's a contradiction (not satisfiable)
     if sentence.contains_empty_clause(): 
         print("the sentence is unsatisfiable")
@@ -224,25 +260,49 @@ def DPLL(sentence):
     #while there are unit clauses, propagate them
     unit_clauses = get_unit_clauses(sentence)
     while(len(unit_clauses) != 0 or len(get_pure_literals(sentence)) != 0):
-        unit_propagate(sentence, unit_clauses)
+        if unit_propagate(sentence, unit_clauses) == False:
+            print("Two unit clauses conflict. The current branch is unsatisfiable no matter what.")
+            return False
         unit_clauses = get_unit_clauses(sentence)
         pure_literal_assign(sentence)
     
     #now we try backtracking
     if(len(sentence.representation) != 0):
         print("WE ARE BACKTRACKING!!!")
+        print("our sentence:")
+        sentence.print()
+        print("our dictionary:")
+        print(sentence.truth_dictionary)
         unassigned_variables = get_unassigned_variables(sentence)
-        try_index = 0
-        while (try_index != len(unassigned_variables)):
-            letter = unassigned_variables[try_index]
-            sentence_copy_true = sentence
-            sentence_copy_false = sentence
-            sentence_copy_true.truth_dictionary[letter] = True
-            sentence_copy_false.truth_dictionary[letter] = False
-            if(DPLL(sentence_copy_true) == False and DPLL(sentence_copy_false) == False):
-                try_index += 1
-        print("all paths have been attempted. the sentence is unsatisfiable.")
-        quit()
+        print("unassigned variables:")
+        print(unassigned_variables)
+        if (len(unassigned_variables) != 0):
+            for letter in unassigned_variables:
+                try_true = None
+                try_false = None
+                print("the letter we are trying: " + letter)
+                sentence_copy_true = sentence.copy()
+                sentence_copy_false = sentence.copy()
+                sentence_copy_true.truth_dictionary[letter] = True
+                did_satisfy_true = remove_satisfied(sentence_copy_true)
+                if (did_satisfy_true):
+                    remove_complements(sentence_copy_true, letter)
+                    try_true = DPLL(sentence_copy_true)
+                sentence_copy_false.truth_dictionary[letter] = False
+                print("dictionary for true:")
+                print(sentence_copy_true.truth_dictionary)
+                print("dictionary for false:")
+                print(sentence_copy_false.truth_dictionary)
+                did_satisfy_false = remove_satisfied(sentence_copy_false)
+                if (did_satisfy_false):
+                    remove_complements(sentence_copy_false, "~" + letter)
+                    try_false = DPLL(sentence_copy_false)
+                if (try_true or try_false) == True:
+                    quit()
+                if (try_true or try_false) == False:
+                    print("all paths attempted, unsatisfiable.")
+                    quit()
+        
         
     DPLL(sentence)
 
@@ -259,7 +319,7 @@ def complement(letter):
         return "~" + letter
 
 def main():
-    sentence = Sentence(1000)
+    sentence = Sentence(150)
     DPLL(sentence)  
 
 if __name__ == "__main__":
